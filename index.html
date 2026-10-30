@@ -1,1 +1,131 @@
-
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>FRONTIER</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#203c32;color:white;font-family:sans-serif;overflow:hidden;touch-action:none}
+canvas{display:block;width:100vw;height:100dvh}
+#info{position:fixed;top:12px;left:12px;background:#142c25dd;padding:12px;border-radius:12px;font-size:13px;white-space:pre-line;pointer-events:none}
+#pad{position:fixed;bottom:25px;left:15px;display:grid;grid-template-columns:repeat(3,52px);gap:4px}
+#act{position:fixed;bottom:25px;right:12px;display:grid;grid-template-columns:repeat(2,65px);gap:5px}
+button{background:#315d4c;color:white;border:1px solid #a1c5a5;border-radius:12px;min-height:50px;font-size:14px;touch-action:none}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="info"></div>
+<div id="pad">
+<span></span><button data-d="up">▲</button><span></span>
+<button data-d="left">◀</button><button data-d="down">▼</button><button data-d="right">▶</button>
+</div>
+<div id="act">
+<button id="gather">採集</button>
+<button id="build">建築</button>
+<button id="raid">レイド</button>
+<button id="wipe">ワイプ</button>
+</div>
+<script>
+const c=document.getElementById("game");
+const ctx=c.getContext("2d");
+const info=document.getElementById("info");
+let W=0,H=0;
+function resize(){
+W=innerWidth;H=innerHeight;
+let d=Math.min(devicePixelRatio||1,2);
+c.width=W*d;c.height=H*d;
+ctx.setTransform(d,0,0,d,0,0);
+}
+window.addEventListener("resize",resize);
+resize();
+let s={x:0,y:0,wood:0,stone:0,level:1,xp:0,houses:[],hour:20};
+try{let saved=JSON.parse(localStorage.getItem("frontier01"));if(saved)s=saved}catch(e){}
+const trees=[[-4,-2],[3,-3],[5,3],[-6,4],[0,-6]];
+const rocks=[[3,4],[-3,5],[6,-1],[-6,-4]];
+const held=new Set();
+function save(){localStorage.setItem("frontier01",JSON.stringify(s))}
+function pos(x,y){
+return [W/2+(x-y-s.x+s.y)*32,H*.43+(x+y-s.x-s.y)*16];
+}
+function tile(x,y){
+let p=pos(x,y);
+ctx.fillStyle=(x+y)%2?"#76af81":"#85bd8c";
+ctx.beginPath();
+ctx.moveTo(p[0],p[1]-16);
+ctx.lineTo(p[0]+32,p[1]);
+ctx.lineTo(p[0],p[1]+16);
+ctx.lineTo(p[0]-32,p[1]);
+ctx.closePath();ctx.fill();
+}
+function drawObj(x,y,type){
+let p=pos(x,y),a=p[0],b=p[1];
+if(type==="tree"){
+ctx.fillStyle="#775139";ctx.fillRect(a-4,b-28,8,28);
+ctx.fillStyle="#377c52";ctx.beginPath();ctx.arc(a,b-36,17,0,7);ctx.fill();
+}else if(type==="rock"){
+ctx.fillStyle="#aab5ba";ctx.beginPath();
+ctx.moveTo(a-14,b);ctx.lineTo(a-9,b-19);ctx.lineTo(a+9,b-23);ctx.lineTo(a+17,b);ctx.fill();
+}else{
+ctx.fillStyle="#d9a56d";ctx.fillRect(a-17,b-26,34,26);
+ctx.fillStyle="#794c3d";ctx.beginPath();
+ctx.moveTo(a-20,b-26);ctx.lineTo(a,b-44);ctx.lineTo(a+20,b-26);ctx.fill();
+}
+}
+function draw(){
+ctx.fillStyle="#b0d7c0";ctx.fillRect(0,0,W,H);
+for(let y=-12;y<=12;y++)for(let x=-12;x<=12;x++)tile(x,y);
+trees.forEach(p=>drawObj(p[0],p[1],"tree"));
+rocks.forEach(p=>drawObj(p[0],p[1],"rock"));
+s.houses.forEach(p=>drawObj(p[0],p[1],"house"));
+let a=W/2,b=H*.43;
+ctx.fillStyle="#395fa9";ctx.fillRect(a-9,b-27,18,25);
+ctx.fillStyle="#f5d4a6";ctx.beginPath();ctx.arc(a,b-34,10,0,7);ctx.fill();
+ctx.fillStyle="#4d382c";ctx.fillRect(a-10,b-45,20,7);
+info.textContent="FRONTIER 0.1  Lv."+s.level+" XP:"+s.xp+"\n木材:"+s.wood+" 石材:"+s.stone+" 拠点:"+s.houses.length+"\nレイド時間 20:00〜23:00";
+requestAnimationFrame(draw);
+}
+draw();
+let last=0;
+function step(t){
+if(t-last>130){
+let dx=0,dy=0;
+if(held.has("up"))dy--;
+if(held.has("down"))dy++;
+if(held.has("left"))dx--;
+if(held.has("right"))dx++;
+if(dx||dy){s.x=Math.max(-10,Math.min(10,s.x+dx));s.y=Math.max(-10,Math.min(10,s.y+dy));save()}
+last=t;
+}
+requestAnimationFrame(step);
+}
+requestAnimationFrame(step);
+document.querySelectorAll("[data-d]").forEach(b=>{
+let d=b.dataset.d;
+b.addEventListener("pointerdown",e=>{e.preventDefault();held.add(d);b.setPointerCapture(e.pointerId)});
+["pointerup","pointercancel","lostpointercapture"].forEach(n=>b.addEventListener(n,()=>held.delete(d)));
+});
+function near(points){return points.some(p=>Math.hypot(p[0]-s.x,p[1]-s.y)<2)}
+document.getElementById("gather").onclick=()=>{
+if(near(trees))s.wood+=3;
+else if(near(rocks))s.stone+=3;
+else{alert("木か岩に近づいてね");return}
+s.xp+=5;if(s.xp>=20*s.level){s.xp=0;s.level++}
+save();
+};
+document.getElementById("build").onclick=()=>{
+if(s.wood<5||s.stone<2){alert("木材5・石材2が必要");return}
+s.wood-=5;s.stone-=2;s.houses.push([s.x+1,s.y]);save();
+};
+document.getElementById("raid").onclick=()=>{
+alert(s.hour>=20&&s.hour<23?"レイド可能時間！":"レイド時間外");
+s.hour=(s.hour+1)%24;save();
+};
+document.getElementById("wipe").onclick=()=>{
+if(!confirm("拠点と物資をリセットする？レベルは残るよ"))return;
+s.wood=0;s.stone=0;s.houses=[];save();
+};
+</script>
+</body>
+</html>
